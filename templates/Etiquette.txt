@@ -1,0 +1,17 @@
+﻿^XA
+^CF0,60
+^FO50,50^FDNom : ##nom##^FS
+^FO50,120^FDDate : ##date##^FS
+
+^FO50,200^GB700,3,3^FS
+
+^CF0,40
+^FO50,250^FDProduit : ##produit##^FS
+^FO50,300^FDQuantité : ##quantite##^FS
+
+^FO50,380^GB700,3,3^FS
+
+^FO50,400^BCN,100,Y,N,N^FD##code_barre##^FS
+
+^FO50,520^FDCode-Barres : ##code_barre##^FS
+^XZ
