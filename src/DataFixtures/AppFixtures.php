@@ -10,14 +10,22 @@ class AppFixtures extends Fixture
 {
     public function load(ObjectManager $manager): void
     {
-        // Génération de plusieurs étiquettes avec des données de test
+        // Création de 10 étiquettes fictives
         for ($i = 1; $i <= 10; $i++) {
             $etiquette = new Etiquette();
             $etiquette->setNom("Produit $i");
-            $etiquette->setDate(new \DateTime(sprintf('2024-11-%02d', $i))); // Date de test pour novembre 2024
-            $etiquette->setProduit("Produit Type $i");
-            $etiquette->setQuantity((string)rand(1, 100)); // Quantité aléatoire
-            $etiquette->setCodeBarre(sprintf('CODE%04d', $i)); // Code-barres unique formaté
+            $etiquette->setDate(new \DateTime("2024-10-$i"));
+            $etiquette->setProduit("Produit $i");
+            $etiquette->setQuantity((string) rand(1, 100));
+            $etiquette->setCodeBarre("CODE$i");
+            $etiquette->setTemplateName("template_$i");
+            $etiquette->setPatterns([
+                'nom',
+                'date',
+                'produit',
+                'quantite',
+                'code_barre',
+            ]);
 
             $manager->persist($etiquette);
         }

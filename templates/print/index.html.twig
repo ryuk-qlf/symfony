@@ -1,20 +1,189 @@
 {% extends 'base.html.twig' %}
 
-{% block title %}Hello PrintController!{% endblock %}
+{% block stylesheets %}
+<link href="{{ asset('css/custom-theme.css') }}" rel="stylesheet">
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+{% endblock %}
 
 {% block body %}
-<style>
-    .example-wrapper { margin: 1em auto; max-width: 800px; width: 95%; font: 18px/1.5 sans-serif; }
-    .example-wrapper code { background: #F5F5F5; padding: 2px 6px; }
-</style>
+    <div class="container mt-5">
+        <h1>Impression d'Étiquettes</h1>
+        <form id="printForm">
+            <div class="mb-3">
+                <label for="printer" class="form-label">Adresse IP de l'imprimante</label>
+                <input type="text" class="form-control" id="printer" value="127.0.0.1">
+            </div>
+            <div class="mb-3">
+                <label for="port" class="form-label">Port de l'imprimante</label>
+                <input type="number" class="form-control" id="port" value="9102">
+            </div>
+            <div class="mb-3">
+                <label for="nameTemplate" class="form-label">Nom Etiquette</label>
+                <input type="text" class="form-control" id="nameTemplate" value="Etiquette">
+            </div>
+            <div class="mb-3">
+                <label for="id_data" class="form-label">ID de l'Étiquette</label>
+                <input type="number" class="form-control" id="id_data" value="11">
+            </div>
 
-<div class="example-wrapper">
-    <h1>Hello {{ controller_name }}! ✅</h1>
+            <h5>Choisir les éléments à inclure dans les patterns :</h5>
+            <div class="form-check">
+                <input class="form-check-input" type="checkbox" value="nom" id="pattern_nom">
+                <label class="form-check-label" for="pattern_nom">Nom</label>
+            </div>
+            <div class="form-check">
+                <input class="form-check-input" type="checkbox" value="date" id="pattern_date">
+                <label class="form-check-label" for="pattern_date">Date</label>
+            </div>
+            <div class="form-check">
+                <input class="form-check-input" type="checkbox" value="produit" id="pattern_produit">
+                <label class="form-check-label" for="pattern_produit">Produit</label>
+            </div>
+            <div class="form-check">
+                <input class="form-check-input" type="checkbox" value="quantite" id="pattern_quantite">
+                <label class="form-check-label" for="pattern_quantite">Quantité</label>
+            </div>
+            <div class="form-check">
+                <input class="form-check-input" type="checkbox" value="code_barre" id="pattern_code_barre">
+                <label class="form-check-label" for="pattern_code_barre">Code-barres</label>
+            </div>
 
-    This friendly message is coming from:
-    <ul>
-        <li>Your controller at <code>C:/Apps/_Git/php-zplprinter-service-New/php-zplprinter-service/src/Controller/PrintController.php</code></li>
-        <li>Your template at <code>C:/Apps/_Git/php-zplprinter-service-New/php-zplprinter-service/templates/print/index.html.twig</code></li>
-    </ul>
-</div>
+            <button type="submit" class="btn btn-primary mt-3">Imprimer l'Étiquette</button>
+            <button type="button" class="btn btn-secondary mt-3" id="previewButton">Prévisualiser</button>
+        </form>
+
+        <div id="response" class="mt-3"></div>
+
+        <!-- Modal pour la prévisualisation -->
+        <div class="modal fade" id="previewModal" tabindex="-1" aria-labelledby="previewModalLabel" aria-hidden="true">
+            <div class="modal-dialog modal-lg">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title" id="previewModalLabel">Prévisualisation de l'Étiquette</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                    </div>
+                    <div class="modal-body">
+                        <img id="previewImage" src="" alt="Aperçu de l'étiquette" style="max-width: 100%; display: none;">
+                        <p id="previewError" class="text-danger" style="display: none;">Erreur lors du rendu de l'étiquette.</p>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Fermer</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+{% endblock %}
+
+{% block javascripts %}
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+
+    <script>
+        // Prévisualiser l'étiquette
+        document.getElementById('previewButton').addEventListener('click', function() {
+            const printer = document.getElementById('printer').value;
+            const port = parseInt(document.getElementById('port').value);
+            const id_data = parseInt(document.getElementById('id_data').value);
+            const patterns = [];
+            const nameTemplate = document.getElementById('nameTemplate').value;
+
+            // Récupérer les patterns sélectionnés
+            document.querySelectorAll('input[type=checkbox]:checked').forEach(function(checkbox) {
+                patterns.push(checkbox.value);
+            });
+
+            const data = {
+                printer: printer,
+                port: port,
+                id_data: id_data,
+                patterns: patterns,
+                nameTemplate: nameTemplate,
+                previsualizer: true // Prévisualisation activée
+            };
+
+            // Envoyer la requête pour prévisualiser
+            fetch('/print', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(data)
+            })
+            .then(response => response.json())
+            .then(data => {
+                // Afficher l'image générée par l'API Labelary
+                const previewImage = document.getElementById('previewImage');
+                const previewError = document.getElementById('previewError');
+
+                if (data.success && data.zpl) {
+                    const labelaryApiUrl = `http://api.labelary.com/v1/printers/8dpmm/labels/4x6/0/${encodeURIComponent(data.zpl)}`;
+                    previewImage.src = labelaryApiUrl;
+                    previewImage.onload = function() {
+                        previewImage.style.display = 'block'; // Afficher l'image
+                        previewError.style.display = 'none'; // Cacher l'erreur
+                    };
+                    previewImage.onerror = function() {
+                        previewImage.style.display = 'none'; // Cacher l'image
+                        previewError.style.display = 'block'; // Afficher l'erreur
+                    };
+
+                    const previewModal = new bootstrap.Modal(document.getElementById('previewModal'));
+                    previewModal.show(); // Afficher la modale
+                } else {
+                    previewError.innerText = 'Erreur lors de la génération du ZPL.';
+                    previewError.style.display = 'block'; // Afficher l'erreur
+                }
+            })
+            .catch((error) => {
+                console.error('Error:', error);
+            });
+        });
+
+        document.getElementById('printForm').addEventListener('submit', function(event) {
+            event.preventDefault(); // Empêcher le rechargement de la page
+            
+            const printer = document.getElementById('printer').value;
+            const port = parseInt(document.getElementById('port').value);
+            const id_data = parseInt(document.getElementById('id_data').value);
+            const patterns = [];
+            const nameTemplate = document.getElementById('nameTemplate').value;
+
+            // Récupérer les patterns sélectionnés
+            document.querySelectorAll('input[type=checkbox]:checked').forEach(function(checkbox) {
+                patterns.push(checkbox.value);
+            });
+
+            const data = {
+                printer: printer,
+                port: port,
+                id_data: id_data,
+                patterns: patterns,
+                nameTemplate: nameTemplate,
+                previsualizer: false
+            };
+
+            fetch('/print', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(data)
+            })
+            .then(response => response.json())
+            .then(data => {
+                // Afficher la réponse
+                document.getElementById('response').innerText = data.msg;
+                if (!data.success) {
+                    document.getElementById('response').classList.add('text-danger');
+                } else {
+                    document.getElementById('response').classList.remove('text-danger');
+                }
+            })
+            .catch((error) => {
+                console.error('Error:', error);
+            });
+        });
+    </script>
 {% endblock %}

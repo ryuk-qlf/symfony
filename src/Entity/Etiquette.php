@@ -29,6 +29,12 @@ class Etiquette
     #[ORM\Column(length: 255)]
     private ?string $code_barre = null;
 
+    #[ORM\Column(length: 255)]
+    private ?string $templateName = null;
+
+    #[ORM\Column]
+    private array $patterns = [];
+
     public function getId(): ?int
     {
         return $this->id;
@@ -90,6 +96,30 @@ class Etiquette
     public function setCodeBarre(string $code_barre): static
     {
         $this->code_barre = $code_barre;
+
+        return $this;
+    }
+
+    public function getTemplateName(): ?string
+    {
+        return $this->templateName;
+    }
+
+    public function setTemplateName(string $templateName): static
+    {
+        $this->templateName = $templateName;
+
+        return $this;
+    }
+
+    public function getPatterns(): array
+    {
+        return $this->patterns;
+    }
+
+    public function setPatterns(array $patterns): static
+    {
+        $this->patterns = $patterns;
 
         return $this;
     }

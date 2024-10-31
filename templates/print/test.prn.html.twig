@@ -1,0 +1,158 @@
+{% extends 'base.html.twig' %}
+
+{% block stylesheets %}
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+{% endblock %}
+
+{% block body %}
+    <div class="container mt-5">
+        <h1>Tester l'impression</h1>
+
+        <form id="testContentForm">
+            <div class="mb-3">
+                <label for="printer" class="form-label">Adresse de l'imprimante</label>
+                <input type="text" class="form-control" id="printer" value="127.0.0.1" required>
+            </div>
+
+            <div class="mb-3">
+                <label for="port" class="form-label">Port de l'imprimante</label>
+                <input type="number" class="form-control" id="port" value="9102" required>
+            </div>
+
+            <div class="mb-3">
+                <label for="content" class="form-label">Contenu à imprimer</label>
+                <textarea class="form-control" id="content" rows="3" required>^XA
+^FX Top section with logo, name and address.
+^CF0,60
+^FO50,50^GB100,100,100^FS
+^FO75,75^FR^GB100,100,100^FS
+^FO93,93^GB40,40,40^FS
+^FO220,50^FDIntershipping, Inc.^FS
+^CF0,30
+^FO220,115^FD1000 Shipping Lane^FS
+^FO220,155^FDShelbyville TN 38102^FS
+^FO220,195^FDUnited States (USA)^FS
+^FO50,250^GB700,3,3^FS
+
+^FX Second section with recipient address and permit information.
+^CFA,30
+^FO50,300^FDJohn Doe^FS
+^FO50,340^FD100 Main Street^FS
+^FO50,380^FDSpringfield TN 39021^FS
+^FO50,420^FDUnited States (USA)^FS
+^CFA,15
+^FO600,300^GB150,150,3^FS
+^FO638,340^FDPermit^FS
+^FO638,390^FD123456^FS
+^FO50,500^GB700,3,3^FS
+
+^FX Third section with bar code.
+^BY5,2,270
+^FO100,550^BC^FD12345678^FS
+
+^FX Fourth section (the two boxes on the bottom).
+^FO50,900^GB700,250,3^FS
+^FO400,900^GB3,250,3^FS
+^CF0,40
+^FO100,960^FDCtr. X34B-1^FS
+^FO100,1010^FDREF1 F00B47^FS
+^FO100,1060^FDREF2 BL4H8^FS
+^CF0,190
+^FO470,955^FDCA^FS
+^XZ</textarea>
+            </div>
+
+            <button type="button" class="btn btn-secondary" id="previewButton">Prévisualiser</button>
+            <button type="submit" class="btn btn-primary">Envoyer à l'imprimante</button>
+        </form>
+
+        <div id="response" class="mt-3"></div>
+    </div>
+
+    <!-- Modal pour la prévisualisation -->
+    <div class="modal fade" id="previewModal" tabindex="-1" aria-labelledby="previewModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="previewModalLabel">Prévisualisation de l'Étiquette</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <img id="previewImage" src="" alt="Aperçu de l'étiquette" style="max-width: 100%; display: none;">
+                    <p id="previewError" class="text-danger" style="display: none;">Erreur lors du rendu de l'étiquette.</p>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Fermer</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+
+    <script>
+        // Afficher la prévisualisation de l'étiquette
+        document.getElementById('previewButton').addEventListener('click', function() {
+            const content = document.getElementById('content').value;
+            const printer = document.getElementById('printer').value;
+            const port = document.getElementById('port').value;
+
+            // Créer l'URL pour l'API Labelary avec le contenu ZPL
+            const labelaryApiUrl = `http://api.labelary.com/v1/printers/8dpmm/labels/4x6/0/${encodeURIComponent(content)}`;
+
+            // Essayer de charger l'image
+            const previewImage = document.getElementById('previewImage');
+            const previewError = document.getElementById('previewError');
+
+            previewImage.src = labelaryApiUrl;
+            previewImage.onload = function() {
+                previewImage.style.display = 'block'; // Afficher l'image
+                previewError.style.display = 'none'; // Cacher l'erreur
+            };
+            previewImage.onerror = function() {
+                previewImage.style.display = 'none'; // Cacher l'image
+                previewError.style.display = 'block'; // Afficher l'erreur
+            };
+
+            const previewModal = new bootstrap.Modal(document.getElementById('previewModal'));
+            previewModal.show(); // Afficher la modale
+        });
+
+        document.getElementById('testContentForm').addEventListener('submit', function(event) {
+            event.preventDefault(); // Empêcher le rechargement de la page
+
+            const printer = document.getElementById('printer').value;
+            const port = parseInt(document.getElementById('port').value);
+            const content = document.getElementById('content').value;
+
+            // Créer le payload pour l'impression
+            const data = {
+                printer: printer,
+                port: port,
+                content: content
+            };
+
+            // Envoyer à l'imprimante (ajoutez votre logique d'impression ici)
+            fetch('/print', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(data)
+            })
+            .then(response => response.json())
+            .then(data => {
+                document.getElementById('response').innerText = data.msg;
+                if (!data.success) {
+                    document.getElementById('response').classList.add('text-danger');
+                } else {
+                    document.getElementById('response').classList.remove('text-danger');
+                }
+            })
+            .catch((error) => {
+                console.error('Error:', error);
+            });
+        });
+    </script>
+{% endblock %}

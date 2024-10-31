@@ -8,11 +8,8 @@ use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\Routing\Annotation\Route;
-use Symfony\Component\Filesystem\Exception\IOExceptionInterface;
 use Symfony\Component\Filesystem\Filesystem;
-use OpenApi\Annotations as OA;
-use Nelmio\ApiDocBundle\Annotation\Model;
-use Nelmio\ApiDocBundle\Annotation\Security;
+use Symfony\Component\HttpFoundation\Response;
 
 class PrintController extends AbstractController
 {
@@ -23,44 +20,56 @@ class PrintController extends AbstractController
         $this->entityManager = $entityManager;
     }
 
+    #[Route('/test-print', name: 'test_print')]
+    public function testPrint(): Response
+    {
+        return $this->render('print/index.html.twig');
+    }
+
+    #[Route('/test-prn', name: 'test_prn')]
+    public function testPrn(): Response
+    {
+        return $this->render('print/test.prn.html.twig');
+    }
+
     #[Route('/print', name: 'print', methods: ['POST', 'OPTIONS'])]
-    #[OA\Tag(name: 'Print')]
     public function printLabel(Request $request): JsonResponse
     {
         $filesystem = new Filesystem();
-        // Gérer les en-têtes CORS
+
         $origin = $request->headers->get('Origin');
+        
         $response = new JsonResponse();
         $response->headers->set('Access-Control-Allow-Origin', $origin ?? '*');
         $response->headers->set('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
         $response->headers->set('Access-Control-Allow-Headers', 'X-Requested-With');
 
-        // Si la méthode est OPTIONS, répondre directement avec le code 200
+        // Check si la method est option
         if ($request->isMethod('OPTIONS')) {
             return $response;
         }
-
-        // Vérifier si l'extension sockets est chargée
+        // Vérifié si l'extension socket est bien chargée
         if (!extension_loaded('sockets')) {
             return $this->setResponse(false, 'The sockets extension is not loaded.');
         }
 
-        // Lire et décoder le JSON envoyé
+        // Vérifier le json
         $json = json_decode($request->getContent());
         if (json_last_error() !== JSON_ERROR_NONE) {
             return $this->setResponse(false, 'Malformed JSON: ' . json_last_error_msg());
         }
 
-        // Vérifier les champs requis
+        // Vérifier qu'il y est une IP
         if (!isset($json->printer)) {
             return $this->setResponse(false, 'No printer specified.');
         }
 
+        // Vérifier qu'il y est un Port
         if (!isset($json->port)) {
             return $this->setResponse(false, 'Printer port not specified.');
         }
 
-        // Créer la connexion socket si nécessaire
+        // Créer une connexion socket que si il y a un content OU un id_data
         $socket = null;
         if (isset($json->content) || isset($json->id_data)) {
             $socket = socket_create(AF_INET, SOCK_STREAM, SOL_TCP);
@@ -71,50 +80,75 @@ class PrintController extends AbstractController
             return $this->setResponse(false, 'No content to process.');
         }
 
-        // Initialisation de la variable $LabelZpl
-
-        // Utiliser les données ZPL RAW ou un template
+        // Vérifie si le json contient un content
         if (isset($json->content)) {
-            // Cas où le content est directement fourni
             $LabelZpl = $json->content;
+        // Vérifie si le json contient un id_data
         } elseif (isset($json->id_data)) {
-            // Cas où un id_data est fourni
+            // Récupère l'étiquette relié à id_data
             $etiquette = $this->entityManager->getRepository(Etiquette::class)->find($json->id_data);
 
-            // Vérification si l'étiquette a été trouvée
             if (!$etiquette) {
                 return $this->setResponse(false, 'Étiquette non trouvée.');
             }
-
-            // Récupération des données de l'étiquette
+            // récupération des données
             $nom = $etiquette->getNom();
             $date = $etiquette->getDate()->format('Y-m-d');
             $produit = $etiquette->getProduit();
             $quantity = $etiquette->getQuantity();
             $code_barre = $etiquette->getCodeBarre();
 
-            // Charger le template ZPL
-            $templatePath = __DIR__ . '/../../templates/Etiquette.txt';
+            // définition du chemin et récupératoin du template.
+            $templatePath = __DIR__ . '/../../templates/'.$json->nameTemplate.'.txt';
             $ZplTemplate = $filesystem->readFile($templatePath);
-
-            // Vérification si le template est trouvé
+            // verification du template
             if (!$ZplTemplate) {
                 return $this->setResponse(false, 'Unable to find template.');
             }
-
-            // Remplacer les placeholders dans le template avec les données de l'étiquette
-            $patterns = ['/##nom##/', '/##date##/', '/##produit##/', '/##quantite##/', '/##code_barre##/'];
-            $replacements = [$nom, $date, $produit, $quantity, $code_barre];
-
+            // replace le template
+            if (!isset($json->patterns)) {
+                return $this->setResponse(false, 'Patterns non trouvés.');
+            }
+            // boucle qui récupere les patterns et replacements
+            foreach ($json->patterns as $key) {
+                switch ($key) {
+                    case "nom":
+                        $patterns[] = '/##nom##/';
+                        $replacements[] = $nom;
+                        break;
+                    case "date":
+                        $patterns[] = '/##date##/';
+                        $replacements[] = $date;
+                        break;
+                    case "produit":
+                        $patterns[] = '/##produit##/';
+                        $replacements[] = $produit;
+                        break;
+                    case "quantite":
+                        $patterns[] = '/##quantite##/';
+                        $replacements[] = $quantity;
+                        break;
+                    case "code_barre":
+                        $patterns[] = '/##code_barre##/';
+                        $replacements[] = $code_barre;
+                        break;
+                }
+            }
             $LabelZpl = preg_replace($patterns, $replacements, $ZplTemplate);
         }
 
-        // Vérification si $LabelZpl est défini avant de procéder à l'impression
+        // vérifi que le label est pas vide pour éviter d'imprimer une page blanche dans le cas ou une erreur est survenu
         if ($LabelZpl === null) {
             return $this->setResponse(false, 'Aucun content ou id_data valide fourni pour créer l\'étiquette.');
         }
 
-        // Tenter la connexion au socket et l'envoi des données
+        // Vérifier si la prévisualisation est demandée
+        if (isset($json->previsualizer) && $json->previsualizer === true) {
+            // Retourner le ZPL pour prévisualisation
+            return new JsonResponse(['success' => true, 'zpl' => $LabelZpl]);
+        }
+
+        // connexion au socket, imperssion et fermeture du socket
         if (socket_connect($socket, $json->printer, $json->port)) { 
             $write = socket_write($socket, $LabelZpl);
             socket_close($socket);
@@ -127,6 +161,7 @@ class PrintController extends AbstractController
         } else {
             return $this->setResponse(false, 'Socket connection failure. Error: ' . socket_strerror(socket_last_error($socket)));
         }
+
     }
 
     private function setResponse(bool $success, ?string $msg = null, $data = null): JsonResponse
